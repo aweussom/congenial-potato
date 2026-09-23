@@ -1,0 +1,17 @@
+{
+  "name": "dekk-tester",
+  "version": "0.1.0",
+  "private": true,
+  "type": "module",
+  "description": "Searchable index of Nordic tyre tests (motor.no / Vi Bilägare) - static site + Node crawler",
+  "scripts": {
+    "discover": "node crawler/discover-tags.mjs",
+    "ingest": "node crawler/ingest.mjs",
+    "parse": "node crawler/parse.mjs",
+    "serve": "npx --yes serve docs -l 5173"
+  },
+  "license": "MIT",
+  "dependencies": {
+    "cheerio": "^1.2.0"
+  }
+}

@@ -1,0 +1,40 @@
+<!doctype html>
+<html lang="nb">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Dekktester</title>
+<meta name="description" content="Søkbar indeks over Motor.no / Vi Bilägares dekktester 2017–2026. Sortert på bremselengde: is for vinterdekk, våt asfalt for sommerdekk.">
+<link rel="icon" href="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 100 100'%3E%3Ccircle cx='50' cy='50' r='44' fill='%23222'/%3E%3Ccircle cx='50' cy='50' r='22' fill='%23fafafa'/%3E%3C/svg%3E">
+<link rel="stylesheet" href="style.css">
+</head>
+<body>
+<header class="top">
+  <div class="top-row">
+    <a class="brand" href="#/pigg">Dekktester</a>
+    <nav class="tabs" id="tabs">
+      <a href="#/sommer" data-tab="sommer">Sommerdekk</a>
+      <a href="#/piggfri" data-tab="piggfri">Piggfrie</a>
+      <a href="#/pigg" data-tab="pigg">Piggdekk</a>
+      <a href="#/tester" data-tab="tester">Testene</a>
+    </nav>
+  </div>
+  <div class="filter-row" id="filters">
+    <input type="search" id="q" placeholder="Søk merke eller modell … (filtrerer mens du skriver)" autocomplete="off" spellcheck="false">
+    <select id="f-year"><option value="">Alle år</option></select>
+    <select id="f-brand"><option value="">Alle merker</option></select>
+    <select id="f-dim"><option value="">Alle dimensjoner</option></select>
+    <label class="chk"><input type="checkbox" id="f-measured"> Bare målt bremselengde</label>
+    <label class="chk"><input type="checkbox" id="f-ref"> Vis referansedekk</label>
+    <span id="count" class="count"></span>
+  </div>
+</header>
+<main id="app"><p class="loading">Laster katalog …</p></main>
+<footer class="foot">
+  <p>Data: <a href="https://www.motor.no/tag/dekktester/" target="_blank" rel="noopener">Motor.no</a> (NAF) og Vi Bilägare. Poeng og målinger er deres, sammenstillingen er vår. Artiklene krever NAF-medlemskap.
+  Bremselengder måles ulikt fra år til år (fart, underlag, bil), så sammenlign meter bare der prosedyren er lik. Prosentkolonnen er relativ til beste dekk i samme test.</p>
+  <p id="built"></p>
+</footer>
+<script type="module" src="app.js"></script>
+</body>
+</html>

@@ -1,0 +1,6 @@
+node_modules/
+crawler/raw/
+crawler/parsed/
+crawler/batches/
+*.log
+.DS_Store
