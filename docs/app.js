@@ -11,6 +11,8 @@
  * State lives in the URL hash: #/pigg?q=nokian&year=2024&sort=value
  */
 
+import { buildMatcher, extractFromText, summarise } from './match.js';
+
 const PRIMARY = { sommer: 'vat_brems', piggfri: 'is_brems', pigg: 'is_brems' };
 const TAB_LABEL = { sommer: 'Sommerdekk', piggfri: 'Piggfrie vinterdekk', pigg: 'Piggdekk' };
 const CLASS_LABEL = { sommer: 'sommer', 'sommer-budsjett': 'sommer (budsjett)', pigg: 'pigg', piggfri: 'piggfri', vinter: 'vinter, klasse ukjent' };
@@ -25,13 +27,14 @@ const fmt = (v, d = 1) => v == null ? '' : Number(v).toLocaleString('nb-NO', { m
 function readHash() {
   const raw = location.hash.replace(/^#\/?/, '');
   const [path, qs = ''] = raw.split('?');
-  const tab = ['sommer', 'piggfri', 'pigg', 'tester'].includes(path) ? path : 'pigg';
+  const tab = ['sommer', 'piggfri', 'pigg', 'tester', 'butikk'].includes(path) ? path : 'pigg';
   const p = new URLSearchParams(qs);
-  return { tab, q: p.get('q') || '', year: p.get('year') || '', brand: p.get('brand') || '', dim: p.get('dim') || '', maxrel: p.get('maxrel') || '', measured: p.get('measured') === '1', ref: p.get('ref') === '1', sort: p.get('sort') || 'rel', dir: p.get('dir') || '', open: p.get('open') || '' };
+  return { tab, q: p.get('q') || '', year: p.get('year') || '', brand: p.get('brand') || '', dim: p.get('dim') || '', maxrel: p.get('maxrel') || '', measured: p.get('measured') === '1', ref: p.get('ref') === '1', sort: p.get('sort') || 'rel', dir: p.get('dir') || '', open: p.get('open') || '', text: p.get('text') || '', hjelp: p.get('hjelp') || '' };
 }
 function writeHash(s) {
   const p = new URLSearchParams();
-  for (const k of ['q', 'year', 'brand', 'dim', 'maxrel', 'sort', 'dir', 'open']) if (s[k]) p.set(k, s[k]);
+  for (const k of ['q', 'year', 'brand', 'dim', 'maxrel', 'sort', 'dir', 'open', 'hjelp']) if (s[k]) p.set(k, s[k]);
+  // pasted shop text is never written back into the URL (it can be 100 kB); it lives in sessionStorage
   if (s.measured) p.set('measured', '1');
   if (s.ref) p.set('ref', '1');
   const qs = p.toString();
@@ -238,11 +241,64 @@ function renderTests(root) {
       <ul>${arts.slice(0, 40).map(a => `<li><a href="${esc(a.url)}" target="_blank" rel="noopener">${esc(a.kicker ? a.kicker.replace(/:$/, '') + ' ' : '')}${esc(a.title)}</a> <span class="muted">(${KIND[a.kind]})</span></li>`).join('')}</ul></div>`;
   }).join('')}</div>`;
 }
+// ---- "Sjekk butikk": paste a shop page, see which tyres are tested --------------------------
+let _matcher = null;
+function renderShop(root) {
+  document.getElementById('filters').classList.add('hidden');
+  _matcher ??= buildMatcher(catalog);
+  const saved = (() => { try { return sessionStorage.getItem('shopText') || ''; } catch { return ''; } })();
+  const text = state.text || saved;
+  root.innerHTML = `
+    <p class="intro"><strong>Sjekk butikk.</strong> Åpne søket ditt hos Dekkonline, Thansen, Dekk365 eller en annen nettbutikk, marker alt (Ctrl+A), kopier (Ctrl+C) og lim inn her.
+      Produktnavn og priser plukkes ut og slås opp mot Motors tester. Ingenting sendes noe sted; alt skjer i nettleseren din.
+      Vil du slippe kopieringen, finnes et <a href="#/butikk?hjelp=1" data-help>bokmerke-skript og et Tampermonkey-skript</a> som gjør det samme rett i butikken.</p>
+    <textarea id="shop-text" class="shop-text" placeholder="Lim inn teksten fra butikkens søkeresultat her …" spellcheck="false">${esc(text)}</textarea>
+    <div class="shop-actions"><button id="shop-run" class="btn">Sjekk mot testene</button> <button id="shop-clear" class="btn secondary">Tøm</button> <span id="shop-count" class="muted"></span></div>
+    <div id="shop-result"></div>
+    ${state.hjelp ? shopHelpHtml() : ''}`;
+  const ta = root.querySelector('#shop-text');
+  const run = () => {
+    const t = ta.value; try { sessionStorage.setItem('shopText', t); } catch { /* ignore */ }
+    renderShopResult(root.querySelector('#shop-result'), root.querySelector('#shop-count'), t);
+  };
+  root.querySelector('#shop-run').addEventListener('click', run);
+  root.querySelector('#shop-clear').addEventListener('click', () => { ta.value = ''; state.text = ''; try { sessionStorage.removeItem('shopText'); } catch { /* ignore */ } run(); });
+  let deb = null; ta.addEventListener('input', () => { clearTimeout(deb); deb = setTimeout(run, 250); });
+  root.querySelector('[data-help]').addEventListener('click', e => { e.preventDefault(); state.hjelp = state.hjelp ? '' : '1'; render(); });
+  if (text) run();
+}
+function renderShopResult(box, countEl, text) {
+  const products = extractFromText(text);
+  if (!products.length) { box.innerHTML = text.trim() ? '<p class="empty">Fant ingen produktnavn i teksten. Prøv å kopiere hele siden (Ctrl+A, Ctrl+C).</p>' : ''; countEl.textContent = ''; return; }
+  const rows = products.map(p => ({ p, hits: summarise(_matcher.match(p.raw)) }));
+  const tested = rows.filter(r => r.hits.length);
+  countEl.textContent = `${products.length} produkter funnet, ${tested.length} er testet av Motor`;
+  const relCls = rel => rel == null ? '' : rel <= 1.05 ? 'rel-good' : rel <= 1.15 ? 'rel-mid' : 'rel-bad';
+  const pct = rel => rel == null ? '' : fmt((rel - 1) * 100, 0).replace(/^(\d)/, '+$1') + ' %';
+  const hitHtml = h => `<div class="hit"><a href="#/${h.class === 'sommer' || h.class === 'sommer-budsjett' ? 'sommer' : h.class === 'piggfri' ? 'piggfri' : 'pigg'}?q=${encodeURIComponent(h.name)}&open=${encodeURIComponent(h.id)}">${h.year} ${esc(CLASS_LABEL[h.class] || h.class)}</a>
+      · ${esc(h.name)}${h.note ? ` <span class="badge unk" title="Testet variant skiller seg fra butikkens">${esc(h.note)}</span>` : ''}${h.disqualified ? ' <span class="badge dq">disket</span>' : ''}
+      · <span class="${relCls(h.brake_rel)}">${h.brake_value != null ? `brems ${fmt(h.brake_value, 1)} ${esc(h.brake_unit || 'm')} (${pct(h.brake_rel)})` : (h.brake_points != null ? `brems ${h.brake_points}/${h.brake_max || '?'} p` : 'ingen bremsetall')}</span>
+      ${h.points != null ? `· ${h.points} p${h.rank ? `, plass ${h.rank}` : ''}` : ''}${h.verdict ? ` · <em>${esc(h.verdict)}</em>` : ''}</div>`;
+  const sortKey = r => { const best = r.hits.map(h => h.brake_rel).filter(v => v != null); return best.length ? Math.min(...best) : (r.hits.length ? 1.5 : 9); };
+  rows.sort((a, b) => sortKey(a) - sortKey(b) || (a.p.price ?? 1e9) - (b.p.price ?? 1e9));
+  box.innerHTML = `<div class="tbl-wrap"><table class="tyres shop"><thead><tr><th>Produkt i butikken</th><th class="num">Pris</th><th>Motors tester (nyeste først)</th></tr></thead><tbody>
+    ${rows.map(r => `<tr class="${r.hits.length ? '' : 'untested'}"><td class="name"><span class="brand">${esc(r.p.name)}</span></td><td class="num">${r.p.price != null ? fmt(r.p.price, 0) + ' kr' : ''}</td>
+      <td class="hits">${r.hits.length ? r.hits.slice(0, 4).map(hitHtml).join('') : '<span class="muted">ikke testet</span>'}</td></tr>`).join('')}
+  </tbody></table></div>`;
+}
+function shopHelpHtml() {
+  const site = location.origin + location.pathname.replace(/[^/]*$/, '');
+  const bm = `javascript:(()=>{const t=document.body.innerText.slice(0,120000);window.open(${JSON.stringify(site)}+'#/butikk?text='+encodeURIComponent(t),'_blank')})();`;
+  return `<div class="help"><h3>Uten å kopiere</h3>
+    <p><strong>Bokmerke:</strong> dra denne lenken til bokmerkelinjen: <a class="bookmarklet" href="${esc(bm)}">Dekktester: sjekk butikk</a>. Klikk den mens du står på butikkens søkeresultat, så åpnes denne fanen med teksten ferdig innlimt.</p>
+    <p><strong>Tampermonkey / Chrome-utvidelse:</strong> <a href="dekktester-butikk.user.js">dekktester-butikk.user.js</a> viser testresultatet som et merke rett ved hvert produkt på dekkonline.com, thansen.no og dekk365.no. Samme kode finnes som upakket Chrome-utvidelse i repoets <code>extension/</code>-mappe.</p></div>`;
+}
 function render() {
   writeHash(state);
   document.querySelectorAll('#tabs a').forEach(a => a.classList.toggle('active', a.dataset.tab === state.tab));
   const root = document.getElementById('app');
   if (state.tab === 'tester') return renderTests(root);
+  if (state.tab === 'butikk') return renderShop(root);
   document.getElementById('filters').classList.remove('hidden');
   renderTable(root);
 }

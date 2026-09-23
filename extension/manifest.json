@@ -1,0 +1,23 @@
+{
+  "manifest_version": 3,
+  "name": "Dekktester: testresultater i nettbutikken",
+  "version": "0.1.0",
+  "description": "Viser Motor.no / Vi Bilägares dekktest-resultat ved hvert dekk hos dekkonline.com, thansen.no og dekk365.no",
+  "content_scripts": [
+    {
+      "matches": [
+        "https://www.dekkonline.com/*",
+        "https://dekkonline.com/*",
+        "https://www.thansen.no/*",
+        "https://www.dekk365.no/*"
+      ],
+      "js": [
+        "content.js"
+      ],
+      "run_at": "document_idle"
+    }
+  ],
+  "host_permissions": [
+    "https://aweussom.github.io/congenial-potato/*"
+  ]
+}

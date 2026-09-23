@@ -478,13 +478,38 @@ for (const t of tests.values()) {
     const rx = new RegExp(`\\b${brandWord.replace(/[.*+?^${}()|[\]\\]/g, '\\$&')}(?:nental)?\\s+((?:[A-Z][\\w*'’+-]*|\\d[\\w-]*)(?:\\s+(?:[A-Z][\\w*'’+-]*|\\d[\\w-]*)){0,3})`, 'g');
     const counts = {};
     for (const m of text.matchAll(rx)) {
-      const model = clean(m[1]).replace(/\s+(?:er|har|og|som|i|på|med|får|ble|viser|scorer|bremser|tar|leverer|kommer|gjør|kan|vinner|imponerer|skuffer|[A-ZÆØÅ][a-zæøå]+(?:er|et|ene)\b).*$/, '');
+      let model = clean(m[1]).replace(/\s+(?:er|har|og|som|i|på|med|får|ble|viser|scorer|bremser|tar|leverer|kommer|gjør|kan|vinner|imponerer|skuffer|[A-ZÆØÅ][a-zæøå]+(?:er|et|ene)\b).*$/, '');
+      // trailing sentence words / footnote digits: "Primacy 4 Michelin-dekket", "PT515 Billig", "R3 3" -> "R33"
+      model = model.replace(/\s+(?:Hva|Billig|Komforten|Dekket|Testen|Dekkene|[A-ZÆØÅ][a-zæøå]+-dekket)$/g, '').replace(/(\d)\s+\d$/, '$1');
       if (!model || /^(?:og|er|har|som|i|på|med)$/i.test(model)) continue;
       counts[model] = (counts[model] || 0) + 1;
     }
-    const best = Object.entries(counts).sort((p, q) => q[1] - p[1] || q[0].length - p[0].length)[0];
-    if (best && (best[1] >= 2 || /\d/.test(best[0]))) { x.name = `${x.brand === 'continental' ? 'Continental' : brandWord} ${best[0]}`; x.name_guessed = true; }
+    // Prefer a model that is already known from a per-tyre article somewhere in the catalog.
+    const known = new Set(tyres.filter(y => !y.placeholder && y.brand === x.brand).map(y => fold(y.name)));
+    const ranked = Object.entries(counts).map(([model, n]) => ({ model, n, known: known.has(fold(`${brandWord} ${model}`)) || [...known].some(k => k.startsWith(fold(`${brandWord} ${model}`) + ' ')) }))
+      .sort((p, q) => (q.known - p.known) || q.n - p.n || q.model.length - p.model.length);
+    const best = ranked[0];
+    if (best && (best.known || best.n >= 2 || /\d/.test(best.model))) { x.name = `${x.brand === 'continental' ? 'Continental' : brandWord} ${best.model}`; x.name_guessed = true; }
   }
+}
+
+// ---- canonical names (hand-curated, crawler/seeds/name-fixes.json) --------------------------
+// Motor spells the same tyre several ways across years (PremiumContact7 / PremiumContact 7,
+// Ultra Grip / UltraGrip, Hakkapeliita …) and the 2020 text glued ranking digits onto names.
+// A curated table beats guessing: fix once, keep forever.
+{
+  const fixes = JSON.parse(fs.readFileSync(path.join(here, 'seeds', 'name-fixes.json'), 'utf8'));
+  const patterns = (fixes.patterns || []).map(([re, rep]) => [new RegExp(re, 'g'), rep]);
+  let n = 0;
+  for (const x of tyres) {
+    const before = x.name;
+    const exact = fixes.exact[`${x.test_id}|${x.class}|${x.name}`] ?? fixes.exact[x.name];
+    if (exact) x.name = exact;
+    for (const [re, rep] of patterns) x.name = x.name.replace(re, rep);
+    x.name = clean(x.name);
+    if (x.name !== before) { x.name_raw = before; x.brand = brandOf(x.name); n++; }
+  }
+  console.log(`name fixes applied: ${n}`);
 }
 
 // ---- derived: max points per discipline, ranks, relative-to-best ---------------------------
