@@ -27,11 +27,11 @@ function readHash() {
   const [path, qs = ''] = raw.split('?');
   const tab = ['sommer', 'piggfri', 'pigg', 'tester'].includes(path) ? path : 'pigg';
   const p = new URLSearchParams(qs);
-  return { tab, q: p.get('q') || '', year: p.get('year') || '', brand: p.get('brand') || '', dim: p.get('dim') || '', measured: p.get('measured') === '1', ref: p.get('ref') === '1', sort: p.get('sort') || 'rel', dir: p.get('dir') || '', open: p.get('open') || '' };
+  return { tab, q: p.get('q') || '', year: p.get('year') || '', brand: p.get('brand') || '', dim: p.get('dim') || '', maxrel: p.get('maxrel') || '', measured: p.get('measured') === '1', ref: p.get('ref') === '1', sort: p.get('sort') || 'rel', dir: p.get('dir') || '', open: p.get('open') || '' };
 }
 function writeHash(s) {
   const p = new URLSearchParams();
-  for (const k of ['q', 'year', 'brand', 'dim', 'sort', 'dir', 'open']) if (s[k]) p.set(k, s[k]);
+  for (const k of ['q', 'year', 'brand', 'dim', 'maxrel', 'sort', 'dir', 'open']) if (s[k]) p.set(k, s[k]);
   if (s.measured) p.set('measured', '1');
   if (s.ref) p.set('ref', '1');
   const qs = p.toString();
@@ -42,9 +42,13 @@ let state = readHash();
 
 // ---- data helpers ------------------------------------------------------------------------------
 function tyresForTab(tab) {
-  if (tab === 'sommer') return catalog.tyres.filter(t => t.class === 'sommer' || t.class === 'sommer-budsjett');
-  if (tab === 'pigg') return catalog.tyres.filter(t => t.class === 'pigg' || t.class === 'vinter');
-  if (tab === 'piggfri') return catalog.tyres.filter(t => t.class === 'piggfri' || t.class === 'vinter');
+  const key = PRIMARY[tab];
+  // Rows that only exist because one stray table row could not be matched to a tyre
+  // (no points, no primary measurement) add noise without information; hide them.
+  const informative = t => !t.placeholder || t.points != null || t.measurements?.[key]?.value != null;
+  if (tab === 'sommer') return catalog.tyres.filter(t => (t.class === 'sommer' || t.class === 'sommer-budsjett') && informative(t));
+  if (tab === 'pigg') return catalog.tyres.filter(t => (t.class === 'pigg' || t.class === 'vinter') && informative(t));
+  if (tab === 'piggfri') return catalog.tyres.filter(t => (t.class === 'piggfri' || t.class === 'vinter') && informative(t));
   return [];
 }
 /** the one number this tab is about, for one tyre */
@@ -91,6 +95,7 @@ function applyFilters(list) {
   return list.filter(t => {
     if (!state.ref && t.reference) return false;
     if (state.measured && primary(t, PRIMARY[state.tab]).value == null) return false;
+    if (state.maxrel) { const rel = primary(t, PRIMARY[state.tab]).rel; if (rel == null || rel > Number(state.maxrel) + 1e-9) return false; }
     const te = testOf(t);
     if (state.year && String(te?.year) !== state.year) return false;
     if (state.brand && fold(t.brand) !== fold(state.brand)) return false;
@@ -116,6 +121,7 @@ function renderTable(root) {
   fillSelect('f-year', years.map(String), state.year);
   fillSelect('f-brand', brands, state.brand, b => b.charAt(0).toUpperCase() + b.slice(1));
   fillSelect('f-dim', dims, state.dim);
+  document.getElementById('f-maxrel').value = state.maxrel;
   const rows = sortTyres(applyFilters(all), key, state.sort, state.dir);
   document.getElementById('count').textContent = rows.length === all.length ? `${rows.length} dekk` : `${rows.length} av ${all.length} dekk`;
   const disc = catalog.disciplines[key];
@@ -161,7 +167,7 @@ function rowHtml(t, key) {
     t.placeholder ? '<span class="badge unk" title="Bare kjent fra en tabell eller resultatliste, ingen egen artikkel">tabell</span>' : '',
   ].join('');
   const cond = p.cond || '';
-  const proc = t.measurements?.[key]?.proc || (cond ? cond.slice(0, 40) + (cond.length > 40 ? '…' : '') : '');
+  const proc = t.measurements?.[key]?.proc || (cond ? '(se detaljer)' : '');
   const open = state.open === t.id;
   const bar = p.rel != null ? `<span class="bar" style="width:${Math.min(60, Math.max(4, (p.rel - 0.95) * 300)).toFixed(0)}px"></span>` : '';
   return `<tr class="row" data-id="${esc(t.id)}">
@@ -184,7 +190,7 @@ function detailHtml(t) {
     const s = t.scores?.[k]; const m = t.measurements?.[k];
     return `<tr><td class="k">${esc(d.label)}</td><td class="num">${m?.value != null ? fmt(m.value, m.value >= 100 ? 0 : 2).replace(/,00$/, '') + ' ' + esc(m.unit || '') + (m.rel != null ? ` <span class="muted">(${fmt((m.rel - 1) * 100, 0).replace(/^(\d)/, '+$1')} %)</span>` : '') : ''}</td><td class="num">${s ? `${s.p}${s.max ? '/' + s.max : ''} p` : ''}</td></tr>`;
   }).join('')).join('');
-  const facts = Object.entries(t.facts || {}).filter(([k]) => !/^Pigger$/.test(k) || true).map(([k, v]) => `<tr><td class="k">${esc(k === 'pigger' ? 'Pigger' : k)}</td><td>${esc(v)}</td></tr>`).join('');
+  const facts = Object.entries(t.facts || {}).map(([k, v]) => `<tr><td class="k">${esc(k)}</td><td>${esc(v)}</td></tr>`).join('');
   const conds = [...new Set(Object.values(t.measurements || {}).map(m => m.conditions).filter(Boolean))];
   const mains = (te?.main_ids || []).map(id => catalog.articles.find(a => a.id === String(id))).filter(Boolean);
   const q = encodeURIComponent(displayName(t));
@@ -208,13 +214,14 @@ function detailHtml(t) {
 function renderTests(root) {
   document.getElementById('filters').classList.add('hidden');
   const tests = catalog.tests;
-  root.innerHTML = `<p class="intro">Alle testene katalogen bygger på. Motor tester sommerdekk i mars og vinterdekk i september, sammen med svenske Vi Bilägare siden 2019.</p>
+  const KIND = { main: 'hovedartikkel', detail: 'alle tall', discipline: 'disiplin', method: 'metode' };
+  root.innerHTML = `<p class="intro">Alle testene katalogen bygger på. Motor tester sommerdekk i mars og vinterdekk i september, sammen med svenske Vi Bilägare siden 2019. Artiklene krever NAF-medlemskap.</p>
   <div class="tests">${tests.map(te => {
-    const arts = catalog.articles.filter(a => a.test_id === te.id && a.kind !== 'tyre');
+    const arts = catalog.articles.filter(a => a.test_id === te.id && KIND[a.kind]).sort((x, y) => (x.kind === 'main' ? 0 : 1) - (y.kind === 'main' ? 0 : 1) || (x.published || '').localeCompare(y.published || ''));
     const cls = Object.entries(te.classes).map(([c, v]) => `${CLASS_LABEL[c] || c}: ${v.tyre_ids.length}`).join(', ');
-    return `<div class="test"><h3>${te.url ? `<a href="${esc(te.url)}" target="_blank" rel="noopener">${esc(te.title)}</a>` : esc(te.title)}</h3>
+    return `<div class="test"><h3>${esc(te.title)}</h3>
       <div class="meta">${esc([te.dimension, te.car, te.location].filter(Boolean).join(' · '))} · ${esc(cls)}${Object.keys(te.disciplines).length ? ` · målte verdier for ${Object.keys(te.disciplines).length} disipliner` : ' · bare poeng'}</div>
-      <ul>${arts.filter(a => a.kind !== 'main').slice(0, 30).map(a => `<li><a href="${esc(a.url)}" target="_blank" rel="noopener">${esc(a.kicker ? a.kicker.replace(/:$/, '') + ' ' : '')}${esc(a.title)}</a> <span class="muted">(${a.kind})</span></li>`).join('')}</ul></div>`;
+      <ul>${arts.slice(0, 40).map(a => `<li><a href="${esc(a.url)}" target="_blank" rel="noopener">${esc(a.kicker ? a.kicker.replace(/:$/, '') + ' ' : '')}${esc(a.title)}</a> <span class="muted">(${KIND[a.kind]})</span></li>`).join('')}</ul></div>`;
   }).join('')}</div>`;
 }
 function render() {
@@ -237,10 +244,18 @@ async function main() {
   document.getElementById('f-ref').checked = state.ref;
   let deb = null;
   q.addEventListener('input', () => { clearTimeout(deb); deb = setTimeout(() => { state.q = q.value; state.open = ''; render(); }, 80); });
-  for (const [id, key] of [['f-year', 'year'], ['f-brand', 'brand'], ['f-dim', 'dim']]) document.getElementById(id).addEventListener('change', e => { state[key] = e.target.value; render(); });
+  document.getElementById('f-maxrel').value = state.maxrel;
+  for (const [id, key] of [['f-year', 'year'], ['f-brand', 'brand'], ['f-dim', 'dim'], ['f-maxrel', 'maxrel']]) document.getElementById(id).addEventListener('change', e => { state[key] = e.target.value; render(); });
   document.getElementById('f-measured').addEventListener('change', e => { state.measured = e.target.checked; render(); });
   document.getElementById('f-ref').addEventListener('change', e => { state.ref = e.target.checked; render(); });
-  window.addEventListener('hashchange', () => { const s = readHash(); if (s.tab !== state.tab) { state = { ...state, tab: s.tab, open: '' }; q.value = state.q; } else state = s; render(); });
+  window.addEventListener('hashchange', () => {
+    const s = readHash(); const prev = state;
+    state = s;
+    // Switching tab via the nav links gives a bare hash; keep the filters the user had typed.
+    if (s.tab !== prev.tab) for (const k of ['q', 'brand', 'maxrel', 'measured', 'ref']) if (!s[k] && prev[k]) state[k] = prev[k];
+    q.value = state.q; document.getElementById('f-measured').checked = state.measured; document.getElementById('f-ref').checked = state.ref;
+    render();
+  });
   render();
 }
 main().catch(e => { document.getElementById('app').innerHTML = `<p class="empty">Kunne ikke laste katalogen: ${esc(e.message)}</p>`; });

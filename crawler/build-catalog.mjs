@@ -94,7 +94,7 @@ const unitOf = s => { const t = clean(s).toLowerCase(); if (/km\/t/.test(t)) ret
 
 // ---- brands -------------------------------------------------------------------------------
 const BRANDS = ['nokian', 'michelin', 'continental', 'bridgestone', 'goodyear', 'pirelli', 'hankook', 'kumho', 'nexen', 'nankang', 'nordman', 'gislaved', 'vredestein', 'falken', 'yokohama', 'toyo', 'firestone', 'dunlop', 'sava', 'linglong', 'landsail', 'triangle', 'goodride', 'maxxis', 'mazzini', 'radar', 'greenmax', 'leao', 'sailun', 'barum', 'wanli', 'davanti', 'kenda', 'duraturn', 'fulda', 'roadstone', 'nordexx', 'cooper', 'uniroyal', 'semperit', 'kleber', 'bfgoodrich', 'apollo', 'laufenn', 'westlake', 'zeetex', 'tracmax', 'hifly', 'gripmax', 'imperial', 'minerva', 'rotalla', 'ovation', 'matador', 'viking', 'debica', 'kormoran', 'riken', 'tigar', 'petlas', 'lassa', 'ceat', 'general', 'avon', 'marshal', 'momo', 'evergreen', 'aplus', 'jinyu', 'antares', 'sunny', 'sunfull', 'habilead', 'kapsen', 'arivo', 'atlas', 'star performer', 'nankang', 'giti', 'gt radial', 'ling long'];
-const BRAND_ALIAS = { conti: 'continental', kuhmo: 'kumho', 'nokian nordman': 'nordman', hankok: 'hankook', 'good year': 'goodyear', michelinn: 'michelin', 'ling long': 'linglong', 'gt radial': 'gt radial' };
+const BRAND_ALIAS = { conti: 'continental', kuhmo: 'kumho', 'nokian nordman': 'nordman', hankok: 'hankook', 'good year': 'goodyear', michelinn: 'michelin', 'ling long': 'linglong', 'gt radial': 'gt radial', peltas: 'petlas', bridgstone: 'bridgestone', goodrid: 'goodride' };
 const REF_RX = /referanse|ref-?dekk|bruktdekk|\bbrukt\b|helarsdekk|helårsdekk|kontinentalt|eu-?piggfri|sentraleurop|mellomeurop|friksjonsdekk|vinterdekk om sommeren|ts ?8[67]0|piggfritt referansedekk|piggfri referanse|^piggfritt$|^piggdekk$|^vw-?dekk|^oem|originaldekk/i;
 function brandOf(name) {
   const f = fold(name);
@@ -164,7 +164,7 @@ for (const a of articles) {
   if (a.kind === 'discipline') t.discipline_ids.push(a.id);
   if (a.kind === 'method') t.method_ids.push(a.id);
   for (const d of dimsIn(a.text)) t.dimensions.add(d);
-  const car = a.text.match(/Testbil(?:en|ene)?\s+(?:var|er|:)\s*([^.]{5,120})\./); if (car && !t.car) t.car = clean(car[1]);
+  const car = a.text.match(/Testbil(?:en|ene)?\s+(?:var|er|:)\s*(.{5,120}?)\.(?!\d)(?:\s|$)/); if (car && !t.car) t.car = clean(car[1]);
   const loc = a.text.match(/\b(Älvsbyn|Alvsbyn|Ivalo|Arvidsjaur|Tammerfors|Tampere|Marseille[s]?|Piteå|Arctic Falls|Nokia|Rovaniemi|Saariselkä|Papenburg|Idiada|Mireval)\b/); if (loc && !t.location) t.location = loc[1];
 }
 
@@ -215,7 +215,7 @@ for (const a of articles) {
     verdict: a.title && fold(a.title) !== fold(name) ? a.title : (a.kicker && fold(a.kicker.replace(/:$/, '')) !== fold(name) ? a.kicker.replace(/:$/, '') : (card?.title || null)),
     kicker: a.kicker, plus: a.plusminus?.plus || null, minus: a.plusminus?.minus || null,
     intro: w.intro || a.subtitle || null,
-    facts: { ...w.facts, ...(studs != null ? { pigger: studs } : {}) },
+    facts: { ...w.facts, ...(studs != null && !('Pigger' in (w.facts || {})) ? { Pigger: studs } : {}) },
     scores, measurements: {},
     // No article body: the source is paywalled and the site is public. Numbers, the
     // one-line verdict and the plus/minus phrases are what we republish; the rest is a link.
@@ -244,7 +244,15 @@ function findTyre(test, cls, label, opts = {}) {
   let hit = pool.filter(x => fold(x.name) === f || fold(x.name).includes(f) || f.includes(fold(x.name)));
   if (hit.length === 1) return hit[0];
   const b = BRAND_ALIAS[f] || f.split(' ')[0];
-  if (REF_RX.test(label)) { const refs = pool.filter(x => x.reference); if (refs.length === 1) return refs[0]; if (refs.length > 1 && opts.refIndex != null) return refs[opts.refIndex] || refs[0]; if (refs.length) return refs[0]; }
+  if (REF_RX.test(label)) {
+    const refs = pool.filter(x => x.reference);
+    if (refs.length === 1) return refs[0]; if (refs.length > 1 && opts.refIndex != null) return refs[opts.refIndex] || refs[0]; if (refs.length) return refs[0];
+    // "EU-piggfri" / "Kontinentalt" can also be a regular participant: the one Central-European
+    // studless tyre in a Nordic test (Pirelli Cinturato Winter, Conti TS870 …)
+    let eu = pool.filter(x => /cinturato winter|wintercontact|ts ?8[67]0|sentraleurop|kontinental|mellomeurop|eu-?dekk|alpin/i.test(`${x.name} ${x.intro || ''} ${x.verdict || ''}`));
+    if (eu.length > 1) eu = eu.filter(x => x.class === 'piggfri');
+    if (eu.length === 1) return eu[0];
+  }
   hit = pool.filter(x => x.brand === b && !x.reference);
   if (hit.length === 1) return hit[0];
   if (hit.length > 1) {
@@ -261,7 +269,10 @@ function findTyre(test, cls, label, opts = {}) {
 for (const a of articles) {
   if (a.kind !== 'main') continue;
   const t = getTest(a);
-  if (!t.title || /piggfri|piggdekk/i.test(t.title) && !/piggfri|piggdekk/i.test(a.title)) { t.title = seeds[a.id]?.seoTitle || a.title; t.url = a.url; }
+  // A winter test has two main articles (pigg + piggfri); the test itself gets a neutral name
+  // and links to all of them (main_ids).
+  t.title = `${t.season === 'vinter' ? 'Vinterdekktest' : 'Sommerdekktest'} ${t.year}`;
+  if (!t.url) t.url = a.url;
   const dims = dimsIn(a.text); if (dims.length && !t.dimension) t.dimension = dims[0];
   // score cards -> total points (+ create tyres for sub-articles we never fetched)
   for (const c of a.cards) {
@@ -359,7 +370,13 @@ for (const a of articles) {
     const rows = tb.rows.map(r => ({ name: r[0], v: num(r[1]) })).filter(r => r.name && r.v != null);
     if (rows.length < 3) continue;
     const key = discKey(tb.heading || '') || discKey(tb.caption || '') || (tb.headings_before || []).map(h => discKey(h)).find(Boolean) || discKey(a.kicker || a.title || '');
-    const unit = unitOf(tb.header[1]) || unitOf(tb.heading || '') || (key ? DISCIPLINES[key]?.units[0] : null);
+    let unit = unitOf(tb.header[1]) || unitOf(tb.heading || '');
+    // A two-column table of small integers under "Karakter"/"Poeng" is a rating, not a
+    // measurement (subjective handling marks 1-5 or 1-10). Skip it here; points come from
+    // the widget / point tables.
+    const smallInts = rows.every(r => Number.isInteger(r.v) && r.v >= 0 && r.v <= 15);
+    if (!unit && (/karakter|poeng|vurdering|score/i.test(tb.header[1] || '') || smallInts)) { warn(a.id, 'rating table, not measurement:', tb.heading, tb.header); continue; }
+    unit = unit || (key ? DISCIPLINES[key]?.units[0] : null);
     if (tb.section) sectionCls = /piggfri/i.test(tb.section) ? 'piggfri' : /piggdekk|pigg\b/i.test(tb.section) ? 'pigg' : sectionCls;
     const cls = /piggfri/i.test(tb.heading || '') ? 'piggfri' : /piggdekk/i.test(tb.heading || '') ? 'pigg' : (sectionCls || (t.season === 'sommer' ? null : null));
     if (!key) { warn(a.id, 'measurement table without discipline:', tb.heading, tb.header); continue; }
@@ -367,6 +384,14 @@ for (const a of articles) {
     for (const r of rows) {
       const b = fold(r.name); seen[b] = seen[b] || 0;
       let tyre = findTyre(t, cls, r.name, { nth: seen[b], refIndex: seen[b] }); seen[b]++;
+      // The section heading (PIGGDEKK / PIGGFRIE DEKK) is sometimes missing above a table,
+      // so the class carried over from the previous one may be wrong. If the brand only
+      // exists in the other winter class, that is where the row belongs.
+      if (!tyre && cls && t.season === 'vinter') {
+        const other = cls === 'pigg' ? 'piggfri' : 'pigg';
+        const alt = findTyre(t, other, r.name, { nth: 0 });
+        if (alt) { tyre = alt; warn(a.id, 'row', r.name, 'moved to', other, 'for', key); }
+      }
       if (!tyre) {
         const pcls = cls || (t.season === 'sommer' ? 'sommer' : 'vinter');
         tyre = tyres.find(x => x.test_id === t.id && x.placeholder && x.class === pcls && fold(x.name) === fold(r.name)) || makePlaceholder(t, pcls, r.name, `detail:${a.id}`);

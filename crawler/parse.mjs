@@ -162,10 +162,21 @@ export function parseArticle(html, id) {
   }
 
   // ---- plus/minus verdict -------------------------------------------------------------
-  // "PLUSS: Vintergrep, kjøreglede. MINUS: Vannplaning, styrefølelse på tørr vei." — each part
-  // is one sentence; take up to the first period (or 200 chars) after MINUS.
-  const pm = clean(main.text()).match(/(?:PLUSS|Pluss)\s*:\s*(.+?)\s*(?:MINUS|Minus)\s*:\s*(.{1,200}?(?:\.|$))/);
-  out.plusminus = pm ? { plus: clean(pm[1]).slice(0, 300), minus: clean(pm[2]).slice(0, 300) } : null;
+  // "PLUSS: Vintergrep, kjøreglede. MINUS: Vannplaning, styrefølelse på tørr vei."
+  // Prefer the element that holds the verdict (usually one <p> or a small box) so the
+  // minus phrase does not run into the next paragraph when it lacks a full stop.
+  out.plusminus = null;
+  {
+    let host = null;
+    main.find('p, div, span, li').each((_, el) => {
+      if (host) return;
+      const t = clean($(el).text());
+      if (/^(PLUSS|Pluss)\s*:/.test(t) && /(MINUS|Minus)\s*:/.test(t) && t.length < 500) host = t;
+    });
+    const src = host || clean(main.text());
+    const pm = src.match(/(?:PLUSS|Pluss)\s*:\s*(.+?)\s*(?:MINUS|Minus)\s*:\s*(.{1,200}?)(?:\.\s|\.$|$)/);
+    if (pm) out.plusminus = { plus: clean(pm[1]).replace(/\.$/, '').slice(0, 300), minus: clean(pm[2]).replace(/\.$/, '').slice(0, 300) };
+  }
 
   // ---- factboxes --------------------------------------------------------------------
   out.factboxes = main.find('.factbox').map((_, f) => clean($(f).text())).get().filter(Boolean);
