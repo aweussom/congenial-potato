@@ -62,6 +62,9 @@ table.tyres td.name .verdict { display: block; color: var(--muted); font-size: .
 .badge.ref { border-color: var(--mid); color: var(--mid); }
 .badge.dq { border-color: var(--bad); color: var(--bad); }
 .badge.unk { border-style: dashed; }
+.badge.cross { border-color: var(--accent); color: var(--accent); background: color-mix(in srgb, var(--accent) 10%, transparent); font-weight: 600; }
+.cross-note { margin: 1rem 0 .5rem; padding: .6rem .9rem; border-left: 4px solid var(--accent); background: color-mix(in srgb, var(--accent) 8%, var(--card)); border-radius: 4px; }
+.tbl-wrap.cross { border-color: var(--accent); }
 .bar { display: inline-block; height: .55em; background: var(--accent); vertical-align: middle; border-radius: 2px; opacity: .55; margin-right: .4em; }
 .rel-good { color: var(--good); }
 .rel-mid { color: var(--mid); }

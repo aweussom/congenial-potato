@@ -90,12 +90,12 @@ function sortTyres(list, key, sortKey, dir) {
 }
 
 // ---- filtering --------------------------------------------------------------------------------
-function applyFilters(list) {
+function applyFilters(list, tab = state.tab) {
   const q = fold(state.q).trim().split(/\s+/).filter(Boolean);
   return list.filter(t => {
     if (!state.ref && t.reference) return false;
-    if (state.measured && primary(t, PRIMARY[state.tab]).value == null) return false;
-    if (state.maxrel) { const rel = primary(t, PRIMARY[state.tab]).rel; if (rel == null || rel > Number(state.maxrel) + 1e-9) return false; }
+    if (state.measured && primary(t, PRIMARY[tab]).value == null) return false;
+    if (state.maxrel) { const rel = primary(t, PRIMARY[tab]).rel; if (rel == null || rel > Number(state.maxrel) + 1e-9) return false; }
     const te = testOf(t);
     if (state.year && String(te?.year) !== state.year) return false;
     if (state.brand && fold(t.brand) !== fold(state.brand)) return false;
@@ -124,27 +124,40 @@ function renderTable(root) {
   document.getElementById('f-maxrel').value = state.maxrel;
   const rows = sortTyres(applyFilters(all), key, state.sort, state.dir);
   document.getElementById('count').textContent = rows.length === all.length ? `${rows.length} dekk` : `${rows.length} av ${all.length} dekk`;
-  const disc = catalog.disciplines[key];
-  const unitLabel = state.tab === 'sommer' ? 'Bremselengde våt asfalt' : 'Bremselengde is';
+  const unitLabelFor = tab => tab === 'sommer' ? 'Bremselengde våt asfalt' : 'Bremselengde is';
+  const unitLabel = unitLabelFor(state.tab);
   const th = (k, label, cls = '') => { const active = (state.sort || 'rel') === k; const d = active ? (state.dir === 'asc' ? 1 : state.dir === 'desc' ? -1 : SORTS[k].dir) : 0; return `<th class="${cls}${active ? ' sorted' : ''}" data-sort="${k}">${label}${active ? `<span class="dir">${d > 0 ? '▲' : '▼'}</span>` : ''}</th>`; };
+  const head = (label, sortable) => `<thead><tr>
+        ${sortable ? th('name', 'Dekk') : '<th>Dekk</th>'}
+        ${sortable ? th('year', 'År', 'num') : '<th class="num">År</th>'}
+        ${sortable ? th('dim', 'Dimensjon') : '<th>Dimensjon</th>'}
+        ${sortable ? th('value', label + ' (m)', 'num') : `<th class="num">${label} (m)</th>`}
+        ${sortable ? th('rel', '% av beste', 'num') : '<th class="num">% av beste</th>'}
+        ${sortable ? th('points', 'Poeng brems', 'num') : '<th class="num">Poeng brems</th>'}
+        ${sortable ? th('total', 'Totalt', 'num') : '<th class="num">Totalt</th>'}
+        <th title="Bremseprosedyre: fart, innendørs/utendørs, temperatur. Meter kan bare sammenlignes der denne er lik.">Prosedyre</th>
+      </tr></thead>`;
   const measuredCount = rows.filter(t => primary(t, key).value != null).length;
+  // No hits here but a search text: show what the *other* tabs have, clearly marked, so a
+  // summer-tyre name typed under Piggdekk still leads somewhere.
+  let crossHtml = '';
+  if (!rows.length && state.q.trim()) {
+    const groups = Object.keys(PRIMARY).filter(tab => tab !== state.tab).map(tab => ({ tab, rows: sortTyres(applyFilters(tyresForTab(tab), tab), PRIMARY[tab], 'rel', '') })).filter(g => g.rows.length);
+    crossHtml = groups.length
+      ? groups.map(g => `<div class="cross-note">Ingen treff blant ${TAB_LABEL[state.tab].toLowerCase()} for «${esc(state.q)}», men <strong>${g.rows.length}</strong> under
+            <a href="#/${g.tab}?q=${encodeURIComponent(state.q)}">${TAB_LABEL[g.tab]}</a>. Radene under er sortert på ${unitLabelFor(g.tab).toLowerCase()}.</div>
+          <div class="tbl-wrap cross"><table class="tyres">${head(unitLabelFor(g.tab), false)}
+            <tbody>${g.rows.map(t => rowHtml(t, PRIMARY[g.tab], TAB_LABEL[g.tab])).join('')}</tbody></table></div>`).join('')
+      : `<p class="empty">Ingen dekk matcher «${esc(state.q)}» i noen fane.</p>`;
+  }
   root.innerHTML = `
     <p class="intro"><strong>${TAB_LABEL[state.tab]}</strong> fra alle Motors tester, sortert på <strong>${unitLabel.toLowerCase()}</strong>.
       ${measuredCount} av ${rows.length} rader har målt bremselengde; resten har bare poeng og sorteres etter dem. «% av beste» er bremselengden i forhold til beste dekk i samme test.
       Klikk en rad for alle disipliner, pluss/minus og lenker.</p>
-    <div class="tbl-wrap"><table class="tyres">
-      <thead><tr>
-        ${th('name', 'Dekk')}
-        ${th('year', 'År', 'num')}
-        ${th('dim', 'Dimensjon')}
-        ${th('value', unitLabel + ' (m)', 'num')}
-        ${th('rel', '% av beste', 'num')}
-        ${th('points', 'Poeng brems', 'num')}
-        ${th('total', 'Totalt', 'num')}
-        <th title="Bremseprosedyre: fart, innendørs/utendørs, temperatur. Meter kan bare sammenlignes der denne er lik.">Prosedyre</th>
-      </tr></thead>
+    ${rows.length || !crossHtml ? `<div class="tbl-wrap"><table class="tyres">${head(unitLabel, true)}
       <tbody>${rows.map(t => rowHtml(t, key)).join('')}</tbody>
-    </table>${rows.length ? '' : '<p class="empty">Ingen dekk matcher filteret.</p>'}</div>`;
+    </table>${rows.length ? '' : '<p class="empty">Ingen dekk matcher filteret.</p>'}</div>` : ''}
+    ${crossHtml}`;
   root.querySelectorAll('th[data-sort]').forEach(h => h.addEventListener('click', () => {
     const k = h.dataset.sort;
     if (state.sort === k) state.dir = state.dir === 'asc' ? 'desc' : state.dir === 'desc' ? '' : (SORTS[k].dir > 0 ? 'desc' : 'asc');
@@ -157,9 +170,10 @@ function renderTable(root) {
     render();
   }));
 }
-function rowHtml(t, key) {
+function rowHtml(t, key, crossTab = null) {
   const te = testOf(t); const p = primary(t, key); const { brand, model } = splitName(t);
   const badges = [
+    crossTab ? `<span class="badge cross" title="Dette dekket hører til en annen fane">${esc(crossTab)}</span>` : '',
     t.reference ? '<span class="badge ref" title="Referansedekk: ikke en deltaker, kjørt for sammenligning">ref</span>' : '',
     t.disqualified ? '<span class="badge dq">disket</span>' : '',
     t.class === 'vinter' ? '<span class="badge unk" title="Kilden sier ikke om dette er pigg eller piggfritt">pigg/piggfri?</span>' : '',
