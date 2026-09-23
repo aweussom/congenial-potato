@@ -57,11 +57,7 @@ Motor publiserer to tester i året (sommerdekk i mars, vinterdekk i september), 
 
 ## Sjekk butikk: hvilke av dekkene i nettbutikken er testet?
 
-Tre måter, samme matcher (`docs/match.js`):
-
-1. **Lim inn.** Fanen «Sjekk butikk» på siden: marker alt på butikkens søkeresultat (Ctrl+A, Ctrl+C), lim inn. Produktnavn og pris plukkes ut linje for linje, og hvert produkt slås opp mot katalogen. Ingenting sendes noe sted.
-2. **Bokmerke.** Et bokmerke-skript (finnes under «Sjekk butikk → hjelp») som åpner fanen med butikksidens tekst ferdig innlimt.
-3. **Tampermonkey / Chrome-utvidelse.** `docs/dekktester-butikk.user.js` legger et merke ved hvert produkt hos dekkonline.com, thansen.no og dekk365.no: «Motor 2026 · is 10,8 m (+0 %) · 92 p», farget etter avstand til beste dekk i samme test, med lenke til raden på siden. Samme kode ligger som upakket utvidelse i `extension/` (chrome://extensions → Last inn upakket). Begge bygges fra `tools/annotator.js` + `docs/match.js` med `node tools/build-userscript.mjs`.
+Fanen «Sjekk butikk» på siden: marker alt på butikkens søkeresultat (Ctrl+A, Ctrl+C), lim inn (Ctrl+V). Produktnavn og pris plukkes ut linje for linje, og hvert produkt slås opp mot katalogen (`docs/match.js`). Ingenting sendes noe sted. Testet mot Dekkonline, Thansen og Dekk365, men virker på enhver liste der produktnavnet starter med dekkmerket. En Tampermonkey-variant som merket produktene rett i butikken ble prøvd og droppet: lim-inn er godt nok, og krever ingen installasjon.
 
 Matchingen normaliserer merke og modell til en kompakt nøkkel (bokstaver og tall, uten dimensjon, last-/hastighetsindeks, SUV/XL/EV og lignende), og godtar at butikken skriver «Ultra Grip» der Motor skriver «UltraGrip», eller «Goodride Z-506» der Motor skriver «IceMaster Spike Z-506». Varianter (SUV-utgaven er testet, butikken selger standardutgaven) merkes som variant.
 

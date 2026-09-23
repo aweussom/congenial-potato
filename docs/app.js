@@ -29,11 +29,11 @@ function readHash() {
   const [path, qs = ''] = raw.split('?');
   const tab = ['sommer', 'piggfri', 'pigg', 'tester', 'butikk'].includes(path) ? path : 'pigg';
   const p = new URLSearchParams(qs);
-  return { tab, q: p.get('q') || '', year: p.get('year') || '', brand: p.get('brand') || '', dim: p.get('dim') || '', maxrel: p.get('maxrel') || '', measured: p.get('measured') === '1', ref: p.get('ref') === '1', sort: p.get('sort') || 'rel', dir: p.get('dir') || '', open: p.get('open') || '', text: p.get('text') || '', hjelp: p.get('hjelp') || '' };
+  return { tab, q: p.get('q') || '', year: p.get('year') || '', brand: p.get('brand') || '', dim: p.get('dim') || '', maxrel: p.get('maxrel') || '', measured: p.get('measured') === '1', ref: p.get('ref') === '1', sort: p.get('sort') || 'rel', dir: p.get('dir') || '', open: p.get('open') || '', text: p.get('text') || '' };
 }
 function writeHash(s) {
   const p = new URLSearchParams();
-  for (const k of ['q', 'year', 'brand', 'dim', 'maxrel', 'sort', 'dir', 'open', 'hjelp']) if (s[k]) p.set(k, s[k]);
+  for (const k of ['q', 'year', 'brand', 'dim', 'maxrel', 'sort', 'dir', 'open']) if (s[k]) p.set(k, s[k]);
   // pasted shop text is never written back into the URL (it can be 100 kB); it lives in sessionStorage
   if (s.measured) p.set('measured', '1');
   if (s.ref) p.set('ref', '1');
@@ -249,13 +249,11 @@ function renderShop(root) {
   const saved = (() => { try { return sessionStorage.getItem('shopText') || ''; } catch { return ''; } })();
   const text = state.text || saved;
   root.innerHTML = `
-    <p class="intro"><strong>Sjekk butikk.</strong> Åpne søket ditt hos Dekkonline, Thansen, Dekk365 eller en annen nettbutikk, marker alt (Ctrl+A), kopier (Ctrl+C) og lim inn her.
-      Produktnavn og priser plukkes ut og slås opp mot Motors tester. Ingenting sendes noe sted; alt skjer i nettleseren din.
-      Vil du slippe kopieringen, finnes et <a href="#/butikk?hjelp=1" data-help>bokmerke-skript og et Tampermonkey-skript</a> som gjør det samme rett i butikken.</p>
+    <p class="intro"><strong>Sjekk butikk.</strong> Åpne søket ditt hos Dekkonline, Thansen, Dekk365 eller en annen nettbutikk, marker alt (Ctrl+A), kopier (Ctrl+C) og lim inn her (Ctrl+V).
+      Produktnavn og priser plukkes ut og slås opp mot Motors tester. Ingenting sendes noe sted; alt skjer i nettleseren din.</p>
     <textarea id="shop-text" class="shop-text" placeholder="Lim inn teksten fra butikkens søkeresultat her …" spellcheck="false">${esc(text)}</textarea>
     <div class="shop-actions"><button id="shop-run" class="btn">Sjekk mot testene</button> <button id="shop-clear" class="btn secondary">Tøm</button> <span id="shop-count" class="muted"></span></div>
-    <div id="shop-result"></div>
-    ${state.hjelp ? shopHelpHtml() : ''}`;
+    <div id="shop-result"></div>`;
   const ta = root.querySelector('#shop-text');
   const run = () => {
     const t = ta.value; try { sessionStorage.setItem('shopText', t); } catch { /* ignore */ }
@@ -264,8 +262,8 @@ function renderShop(root) {
   root.querySelector('#shop-run').addEventListener('click', run);
   root.querySelector('#shop-clear').addEventListener('click', () => { ta.value = ''; state.text = ''; try { sessionStorage.removeItem('shopText'); } catch { /* ignore */ } run(); });
   let deb = null; ta.addEventListener('input', () => { clearTimeout(deb); deb = setTimeout(run, 250); });
-  root.querySelector('[data-help]').addEventListener('click', e => { e.preventDefault(); state.hjelp = state.hjelp ? '' : '1'; render(); });
   if (text) run();
+  else ta.focus();
 }
 function renderShopResult(box, countEl, text) {
   const products = extractFromText(text);
@@ -285,13 +283,6 @@ function renderShopResult(box, countEl, text) {
     ${rows.map(r => `<tr class="${r.hits.length ? '' : 'untested'}"><td class="name"><span class="brand">${esc(r.p.name)}</span></td><td class="num">${r.p.price != null ? fmt(r.p.price, 0) + ' kr' : ''}</td>
       <td class="hits">${r.hits.length ? r.hits.slice(0, 4).map(hitHtml).join('') : '<span class="muted">ikke testet</span>'}</td></tr>`).join('')}
   </tbody></table></div>`;
-}
-function shopHelpHtml() {
-  const site = location.origin + location.pathname.replace(/[^/]*$/, '');
-  const bm = `javascript:(()=>{const t=document.body.innerText.slice(0,120000);window.open(${JSON.stringify(site)}+'#/butikk?text='+encodeURIComponent(t),'_blank')})();`;
-  return `<div class="help"><h3>Uten å kopiere</h3>
-    <p><strong>Bokmerke:</strong> dra denne lenken til bokmerkelinjen: <a class="bookmarklet" href="${esc(bm)}">Dekktester: sjekk butikk</a>. Klikk den mens du står på butikkens søkeresultat, så åpnes denne fanen med teksten ferdig innlimt.</p>
-    <p><strong>Tampermonkey / Chrome-utvidelse:</strong> <a href="dekktester-butikk.user.js">dekktester-butikk.user.js</a> viser testresultatet som et merke rett ved hvert produkt på dekkonline.com, thansen.no og dekk365.no. Samme kode finnes som upakket Chrome-utvidelse i repoets <code>extension/</code>-mappe.</p></div>`;
 }
 function render() {
   writeHash(state);
