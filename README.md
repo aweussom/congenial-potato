@@ -26,6 +26,26 @@ Testene bruker ulike biler, dimensjoner og målemetoder. **Ikke sammenlign antal
 
 I fanen «Sjekk butikk» kan du kopiere teksten fra en butikks søkeresultat (Ctrl+A, Ctrl+C) og lime den inn (Ctrl+V). Siden viser hvilke produkter som finnes i Motors tester, sammen med prisene den finner i teksten. Det krever ingen installasjon, og teksten behandles i nettleseren din. Funksjonen er prøvd med Dekkonline, Thansen og Dekk365. Treff på en annen variant, for eksempel SUV-utgaven, blir merket.
 
+Eksempel med et [søk etter piggdekk hos Dekk365](https://www.dekk365.no/finn-produkt/dekk?Width=205&Profile=55&Diameter=16&Season=2&ProductSeasonType=1):
+
+1. Finn dekkene i nettbutikken.
+
+   ![Søkeresultat for piggdekk i dimensjon 205/55 R16 hos Dekk365](screenshots/butikk-1-sokeresultat.png)
+
+2. Trykk **Ctrl+A** og **Ctrl+C** for å kopiere teksten fra hele siden.
+
+   ![Hele søkeresultatet hos Dekk365 er markert for kopiering](screenshots/butikk-2-marker-alt.png)
+
+3. Åpne [Sjekk butikk](https://aweussom.github.io/congenial-potato/#/butikk) og klikk i tekstfeltet.
+
+   ![Tomt tekstfelt i fanen Sjekk butikk](screenshots/butikk-3-lim-inn.png)
+
+4. Trykk **Ctrl+V**. Treff og priser vises under tekstfeltet.
+
+   ![Butikkprodukter med priser og treff i Motors tester etter innliming](screenshots/butikk-4-resultater.png)
+
+*Skjermbildene er fra 24. september 2026. Prisene er bare et eksempel og kan ha endret seg.*
+
 ## For dem som vedlikeholder siden
 
 ### Arkitektur
