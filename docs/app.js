@@ -271,7 +271,7 @@ function renderShopResult(box, countEl, text) {
   countEl.textContent = `${products.length} produkter funnet, ${tested.length} er testet av Motor`;
   const relCls = rel => rel == null ? '' : rel <= 1.05 ? 'rel-good' : rel <= 1.15 ? 'rel-mid' : 'rel-bad';
   const pct = rel => rel == null ? '' : fmt((rel - 1) * 100, 0).replace(/^(\d)/, '+$1') + ' %';
-  const hitHtml = h => `<div class="hit"><a href="#/${h.class === 'sommer' || h.class === 'sommer-budsjett' ? 'sommer' : h.class === 'piggfri' ? 'piggfri' : 'pigg'}?q=${encodeURIComponent(h.name)}&open=${encodeURIComponent(h.id)}">${h.year} ${esc(CLASS_LABEL[h.class] || h.class)}</a>
+  const hitHtml = h => `<div class="hit"><a href="#/${h.class === 'sommer' || h.class === 'sommer-budsjett' ? 'sommer' : h.class === 'piggfri' ? 'piggfri' : 'pigg'}?q=${encodeURIComponent(h.name)}&open=${encodeURIComponent(h.id)}${h.reference ? '&ref=1' : ''}">${h.year} ${esc(CLASS_LABEL[h.class] || h.class)}</a>
       · ${esc(h.name)}${h.note ? ` <span class="badge unk" title="Testet variant skiller seg fra butikkens">${esc(h.note)}</span>` : ''}${h.disqualified ? ' <span class="badge dq">disket</span>' : ''}
       · <span class="${relCls(h.brake_rel)}">${h.brake_value != null ? `brems ${fmt(h.brake_value, 1)} ${esc(h.brake_unit || 'm')} (${pct(h.brake_rel)})` : (h.brake_points != null ? `brems ${h.brake_points}/${h.brake_max || '?'} p` : 'ingen bremsetall')}</span>
       ${h.points != null ? `· ${h.points} p${h.rank ? `, plass ${h.rank}` : ''}` : ''}${h.verdict ? ` · <em>${esc(h.verdict)}</em>` : ''}</div>`;
@@ -310,8 +310,12 @@ async function main() {
   window.addEventListener('hashchange', () => {
     const s = readHash(); const prev = state;
     state = s;
-    // Switching tab via the nav links gives a bare hash; keep the filters the user had typed.
-    if (s.tab !== prev.tab) for (const k of ['q', 'brand', 'maxrel', 'measured', 'ref']) if (!s[k] && prev[k]) state[k] = prev[k];
+    // Keep filters when moving between tyre lists. Shop and test pages hide those
+    // controls, so carrying their old values into a shop-result link can hide the
+    // exact tyre the user clicked (for example a +122 % result after a +5 % filter).
+    if (s.tab !== prev.tab && PRIMARY[s.tab] && PRIMARY[prev.tab]) {
+      for (const k of ['q', 'brand', 'maxrel', 'measured', 'ref']) if (!s[k] && prev[k]) state[k] = prev[k];
+    }
     q.value = state.q; document.getElementById('f-measured').checked = state.measured; document.getElementById('f-ref').checked = state.ref;
     render();
   });

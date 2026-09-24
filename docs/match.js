@@ -122,7 +122,7 @@ export function summarise(matches, primaryFor = cls => (cls === 'sommer' || cls 
   return matches.filter(m => m.score >= best - 0.5).map(m => {
     const key = primaryFor(m.tyre.class); const meas = m.tyre.measurements?.[key]; const sc = m.tyre.scores?.[key];
     return {
-      id: m.tyre.id, year: m.test?.year, season: m.test?.season, class: m.tyre.class, name: m.tyre.name, url: m.tyre.url,
+      id: m.tyre.id, year: m.test?.year, season: m.test?.season, class: m.tyre.class, name: m.tyre.name, url: m.tyre.url, reference: !!m.tyre.reference,
       points: m.tyre.points, rank: m.tyre.rank, verdict: m.tyre.verdict, disqualified: !!m.tyre.disqualified,
       brake_value: meas?.value ?? null, brake_unit: meas?.unit ?? null, brake_rel: meas?.rel ?? null,
       brake_points: sc?.p ?? null, brake_max: sc?.max ?? null, note: m.note, score: m.score,
