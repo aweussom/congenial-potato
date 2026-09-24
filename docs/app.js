@@ -6,9 +6,9 @@
  *   sommer   -> bremselengde på våt asfalt (vat_brems)
  *   pigg/piggfri -> bremselengde på is (is_brems)
  * Default order is the measured distance relative to the best tyre in the same
- * test (comparable across years); click headers to sort on metres, points, total
+ * test; click headers to sort on relative braking distance, points, total
  * points, year or name. The search box filters brand/model as you type.
- * State lives in the URL hash: #/pigg?q=nokian&year=2024&sort=value
+ * State lives in the URL hash: #/pigg?q=nokian&year=2024&sort=rel
  */
 
 import { buildMatcher, extractFromText, summarise } from './match.js';
@@ -29,7 +29,8 @@ function readHash() {
   const [path, qs = ''] = raw.split('?');
   const tab = ['sommer', 'piggfri', 'pigg', 'tester', 'butikk'].includes(path) ? path : 'pigg';
   const p = new URLSearchParams(qs);
-  return { tab, q: p.get('q') || '', year: p.get('year') || '', brand: p.get('brand') || '', dim: p.get('dim') || '', maxrel: p.get('maxrel') || '', measured: p.get('measured') === '1', ref: p.get('ref') === '1', sort: p.get('sort') || 'rel', dir: p.get('dir') || '', open: p.get('open') || '', text: p.get('text') || '' };
+  const sort = p.get('sort') || 'rel';
+  return { tab, q: p.get('q') || '', year: p.get('year') || '', brand: p.get('brand') || '', dim: p.get('dim') || '', maxrel: p.get('maxrel') || '', measured: p.get('measured') === '1', ref: p.get('ref') === '1', sort: sort === 'value' ? 'rel' : sort, dir: p.get('dir') || '', open: p.get('open') || '', text: p.get('text') || '' };
 }
 function writeHash(s) {
   const p = new URLSearchParams();
@@ -72,7 +73,6 @@ function splitName(t) {
 // ---- sorting -----------------------------------------------------------------------------------
 const SORTS = {
   rel: { label: '% av beste', dir: 1, key: (t, k) => primary(t, k).rel },
-  value: { label: 'Meter', dir: 1, key: (t, k) => primary(t, k).value },
   points: { label: 'Poeng', dir: -1, key: (t, k) => primary(t, k).share },
   total: { label: 'Totalt', dir: -1, key: t => t.points },
   year: { label: 'År', dir: -1, key: t => testOf(t)?.year },
@@ -130,11 +130,10 @@ function renderTable(root) {
   const unitLabelFor = tab => tab === 'sommer' ? 'Bremselengde våt asfalt' : 'Bremselengde is';
   const unitLabel = unitLabelFor(state.tab);
   const th = (k, label, cls = '') => { const active = (state.sort || 'rel') === k; const d = active ? (state.dir === 'asc' ? 1 : state.dir === 'desc' ? -1 : SORTS[k].dir) : 0; return `<th class="${cls}${active ? ' sorted' : ''}" data-sort="${k}">${label}${active ? `<span class="dir">${d > 0 ? '▲' : '▼'}</span>` : ''}</th>`; };
-  const head = (label, sortable) => `<thead><tr>
+  const head = sortable => `<thead><tr>
         ${sortable ? th('name', 'Dekk') : '<th>Dekk</th>'}
         ${sortable ? th('year', 'År', 'num') : '<th class="num">År</th>'}
         ${sortable ? th('dim', 'Dimensjon') : '<th>Dimensjon</th>'}
-        ${sortable ? th('value', label + ' (m)', 'num') : `<th class="num">${label} (m)</th>`}
         ${sortable ? th('rel', '% av beste', 'num') : '<th class="num">% av beste</th>'}
         ${sortable ? th('points', 'Poeng brems', 'num') : '<th class="num">Poeng brems</th>'}
         ${sortable ? th('total', 'Totalt', 'num') : '<th class="num">Totalt</th>'}
@@ -149,7 +148,7 @@ function renderTable(root) {
     crossHtml = groups.length
       ? groups.map(g => `<div class="cross-note">Ingen treff blant ${TAB_LABEL[state.tab].toLowerCase()} for «${esc(state.q)}», men <strong>${g.rows.length}</strong> under
             <a href="#/${g.tab}?q=${encodeURIComponent(state.q)}">${TAB_LABEL[g.tab]}</a>. Radene under er sortert på ${unitLabelFor(g.tab).toLowerCase()}.</div>
-          <div class="tbl-wrap cross"><table class="tyres">${head(unitLabelFor(g.tab), false)}
+          <div class="tbl-wrap cross"><table class="tyres">${head(false)}
             <tbody>${g.rows.map(t => rowHtml(t, PRIMARY[g.tab], TAB_LABEL[g.tab])).join('')}</tbody></table></div>`).join('')
       : `<p class="empty">Ingen dekk matcher «${esc(state.q)}» i noen fane.</p>`;
   }
@@ -157,7 +156,7 @@ function renderTable(root) {
     <p class="intro"><strong>${TAB_LABEL[state.tab]}</strong> fra alle Motors tester, sortert på <strong>${unitLabel.toLowerCase()}</strong>.
       ${measuredCount} av ${rows.length} rader har målt bremselengde; resten har bare poeng og sorteres etter dem. «% av beste» er bremselengden i forhold til beste dekk i samme test.
       Klikk en rad for alle disipliner, pluss/minus og lenker.</p>
-    ${rows.length || !crossHtml ? `<div class="tbl-wrap"><table class="tyres">${head(unitLabel, true)}
+    ${rows.length || !crossHtml ? `<div class="tbl-wrap"><table class="tyres">${head(true)}
       <tbody>${rows.map(t => rowHtml(t, key)).join('')}</tbody>
     </table>${rows.length ? '' : '<p class="empty">Ingen dekk matcher filteret.</p>'}</div>` : ''}
     ${crossHtml}`;
@@ -191,7 +190,6 @@ function rowHtml(t, key, crossTab = null) {
       <td class="name"><span class="brand">${esc(brand)}</span> ${esc(model)}${badges}${t.verdict ? `<span class="verdict">${esc(t.verdict)}</span>` : ''}</td>
       <td class="num">${te?.year ?? ''}</td>
       <td class="dim">${esc(te?.dimension || '')}</td>
-      <td class="num">${p.value != null ? fmt(p.value, p.value >= 100 ? 0 : 1) + (p.unit && p.unit !== 'm' ? ' ' + esc(p.unit) : '') : '<span class="muted">–</span>'}</td>
       <td class="num ${relClass(p.rel)}">${p.rel != null ? bar + fmt((p.rel - 1) * 100, 0).replace(/^(\d)/, '+$1') + ' %' : ''}</td>
       <td class="num">${p.p != null ? `${p.p}${p.max ? '/' + p.max : ''}` : '<span class="muted">–</span>'}</td>
       <td class="num">${t.points ?? ''}</td>
@@ -211,7 +209,7 @@ function detailHtml(t) {
   const conds = [...new Set(Object.values(t.measurements || {}).map(m => m.conditions).filter(Boolean))];
   const mains = (te?.main_ids || []).map(id => catalog.articles.find(a => a.id === String(id))).filter(Boolean);
   const q = encodeURIComponent(displayName(t));
-  return `<tr class="detail"><td colspan="8"><div class="detail"><div class="detail-grid">
+  return `<tr class="detail"><td colspan="7"><div class="detail"><div class="detail-grid">
     <div>
       <h4>${esc(te?.title || te?.id || '')}</h4>
       <p class="muted">${esc([te?.dimension, te?.car, te?.location].filter(Boolean).join(' · '))}${t.rank ? ` · plass ${t.rank}` : ''}${t.points != null ? ` · ${t.points} poeng` : ''}</p>
