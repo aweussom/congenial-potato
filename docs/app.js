@@ -209,6 +209,7 @@ function detailHtml(t) {
   const conds = [...new Set(Object.values(t.measurements || {}).map(m => m.conditions).filter(Boolean))];
   const mains = (te?.main_ids || []).map(id => catalog.articles.find(a => a.id === String(id))).filter(Boolean);
   const q = encodeURIComponent(displayName(t));
+  const prisjaktQuery = new URLSearchParams({ query: displayName(t) }).toString();
   return `<tr class="detail"><td colspan="7"><div class="detail"><div class="detail-grid">
     <div>
       <h4>${esc(te?.title || te?.id || '')}</h4>
@@ -218,7 +219,7 @@ function detailHtml(t) {
       ${(t.body || []).slice(0, 4).map(p => `<p class="body">${esc(p)}</p>`).join('')}
       <p class="links">${t.url ? `<a href="${esc(t.url)}" target="_blank" rel="noopener">Motors omtale ↗</a>` : ''}
         ${mains.map(a => `<a href="${esc(a.url)}" target="_blank" rel="noopener">${esc(a.kicker ? a.kicker.replace(/:$/, '') : 'Hovedartikkel')} ↗</a>`).join('')}
-        <a href="https://www.prisjakt.no/search?search=${q}" target="_blank" rel="noopener">Prisjakt ↗</a>
+        <a href="https://www.prisjakt.no/search?${prisjaktQuery}" target="_blank" rel="noopener">Prisjakt ↗</a>
         <a href="https://www.google.com/search?q=${q}+pris" target="_blank" rel="noopener">Google ↗</a></p>
     </div>
     <div><h4>Disipliner (målt · poeng)</h4><table class="small">${table || '<tr><td class="muted">Ingen delresultater funnet.</td></tr>'}</table>
